@@ -338,7 +338,7 @@ function dm_handle_actions() {
 	global $wpdb, $parent_file;
 	$url = add_query_arg( array( 'page' => 'domainmapping' ), admin_url( $parent_file ) );
 	if ( !empty( $_POST[ 'action' ] ) ) {
-		$domain = esc_sql( $_POST[ 'domain' ] );
+		$domain = sanitize_text_field( $_POST[ 'domain' ] );
 		if ( $domain == '' ) {
 			wp_die( "You must enter a domain" );
 		}
@@ -347,7 +347,7 @@ function dm_handle_actions() {
 		switch( $_POST[ 'action' ] ) {
 			case "add":
 				do_action('dm_handle_actions_add', $domain);
-				if( null == $wpdb->get_row( "SELECT blog_id FROM {$wpdb->blogs} WHERE domain = '$domain'" ) && null == $wpdb->get_row( "SELECT blog_id FROM {$wpdb->dmtable} WHERE domain = '$domain'" ) ) {
+				if( null == $wpdb->get_row( $wpdb->prepare( "SELECT blog_id FROM {$wpdb->blogs} WHERE domain = %s", $domain ) ) && null == $wpdb->get_row( $wpdb->prepare( "SELECT blog_id FROM {$wpdb->dmtable} WHERE domain = %s", $domain ) ) ) {
 					if ( array_key_exists('primary', $_POST) && $_POST[ 'primary' ] ) {
 						$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->dmtable} SET active = 0 WHERE blog_id = %d", $wpdb->blogid ) );
 					}
@@ -371,13 +371,13 @@ function dm_handle_actions() {
 			break;
 		}
 	} elseif( array_key_exists('action', $_GET) && $_GET[ 'action' ] == 'delete' ) {
-		$domain = esc_sql( $_GET[ 'domain' ] );
+		$domain = sanitize_text_field( $_GET[ 'domain' ] );
 		if ( $domain == '' ) {
 			wp_die( __( "You must enter a domain", 'wordpress-mu-domain-mapping' ) );
 		}
 		check_admin_referer( "delete" . $_GET['domain'] );
 		do_action('dm_handle_actions_del', $domain);
-		$wpdb->query( "DELETE FROM {$wpdb->dmtable} WHERE domain = '$domain'" );
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->dmtable} WHERE domain = %s", $domain ) );
 		wp_redirect( add_query_arg( array( 'updated' => 'del' ), $url ) );
 		exit;
 	}
@@ -441,7 +441,7 @@ function dm_manage_page() {
 	}
 
 	$protocol = is_ssl() ? 'https://' : 'http://';
-	$domains = $wpdb->get_results( "SELECT * FROM {$wpdb->dmtable} WHERE blog_id = '{$wpdb->blogid}'", ARRAY_A );
+	$domains = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->dmtable} WHERE blog_id = %d", $wpdb->blogid ), ARRAY_A );
 	if ( is_array( $domains ) && !empty( $domains ) ) {
 		$orig_url = parse_url( get_original_url( 'siteurl' ) );
 		$domains[] = array( 'domain' => $orig_url[ 'host' ], 'path' => array_key_exists('path', $orig_url) ? $orig_url[ 'path' ] : '', 'active' => 0 );
@@ -516,14 +516,14 @@ function domain_mapping_siteurl( $setting ) {
 		$s = $wpdb->suppress_errors();
 
 		if ( get_site_option( 'dm_no_primary_domain' ) == 1 ) {
-			$domain = $wpdb->get_var( "SELECT domain FROM {$wpdb->dmtable} WHERE blog_id = '{$wpdb->blogid}' AND domain = '" . esc_sql( $_SERVER[ 'HTTP_HOST' ] ) . "' LIMIT 1" );
+			$domain = $wpdb->get_var( $wpdb->prepare( "SELECT domain FROM {$wpdb->dmtable} WHERE blog_id = %d AND domain = %s LIMIT 1", $wpdb->blogid, $_SERVER[ 'HTTP_HOST' ] ) );
 			if ( null == $domain ) {
 				$return_url[ $wpdb->blogid ] = untrailingslashit( get_original_url( "siteurl" ) );
 				return $return_url[ $wpdb->blogid ];
 			}
 		} else {
 			// get primary domain, if we don't have one then return original url.
-			$domain = $wpdb->get_var( "SELECT domain FROM {$wpdb->dmtable} WHERE blog_id = '{$wpdb->blogid}' AND active = 1 LIMIT 1" );
+			$domain = $wpdb->get_var( $wpdb->prepare( "SELECT domain FROM {$wpdb->dmtable} WHERE blog_id = %d AND active = 1 LIMIT 1", $wpdb->blogid ) );
 			if ( null == $domain ) {
 				$return_url[ $wpdb->blogid ] = untrailingslashit( get_original_url( "siteurl" ) );
 				return $return_url[ $wpdb->blogid ];
